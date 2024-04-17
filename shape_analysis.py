@@ -14,6 +14,8 @@ from scipy.stats import linregress
 
 from sklearn.linear_model import LinearRegression
 
+from multiprocessing import Pool
+from functools import partial
 
 
 ### File importing
@@ -110,6 +112,31 @@ def calc_vector_dispersion(v,f):
 
     return(vk, skip)
 
+
+# def do_stuff(point, v, r_eval):
+#     vtree = spatial.cKDTree(v)
+#     occurrence = 0
+#     neighbor = vtree.query(point, k = 1, p = 2)
+#     x_eval = (v[neighbor[1]][0] >= point[0] - (r_eval / 2)) and (v[neighbor[1]][0] < point[0] + (r_eval / 2))
+#     y_eval = (v[neighbor[1]][1] >= point[1] - (r_eval / 2)) and (v[neighbor[1]][1] < point[1] + (r_eval / 2))
+#     z_eval = (v[neighbor[1]][2] >= point[2] - (r_eval / 2)) and (v[neighbor[1]][2] < point[2] + (r_eval / 2))
+#     if x_eval and y_eval and z_eval:
+#         occurrence = 1
+#     return(occurrence)
+
+
+def query_tree(vtree, v, r_eval, point):
+    neighbor = vtree.query(point, k = 1, p = 2)
+    x_eval = (v[neighbor[1]][0] >= point[0] - (r_eval / 2)) and (v[neighbor[1]][0] < point[0] + (r_eval / 2))
+    y_eval = (v[neighbor[1]][1] >= point[1] - (r_eval / 2)) and (v[neighbor[1]][1] < point[1] + (r_eval / 2))
+    z_eval = (v[neighbor[1]][2] >= point[2] - (r_eval / 2)) and (v[neighbor[1]][2] < point[2] + (r_eval / 2))
+    if x_eval and y_eval and z_eval:
+        return 1
+    else:
+        return 0
+
+
+
 def fd_cube(v, min_res):
 
     # kd-tree for quick nearest-neighbor lookup
@@ -190,14 +217,17 @@ def fd_cube(v, min_res):
         x, y, z = np.mgrid[x_low:x_hi:r_eval, y_low:y_hi:r_eval, z_low:z_hi:r_eval]
         points = zip(x.ravel(), y.ravel(), z.ravel())
         
-        for point in points:
-            neighbor = vtree.query(point, k = 1, p = 2)
-            x_eval = (v[neighbor[1]][0] >= point[0] - (r_eval / 2)) and (v[neighbor[1]][0] < point[0] + (r_eval / 2))
-            y_eval = (v[neighbor[1]][1] >= point[1] - (r_eval / 2)) and (v[neighbor[1]][1] < point[1] + (r_eval / 2))
-            z_eval = (v[neighbor[1]][2] >= point[2] - (r_eval / 2)) and (v[neighbor[1]][2] < point[2] + (r_eval / 2))
-            if x_eval and y_eval and z_eval:
-                count[i] += 1
-    
+
+        # for point in points:
+        #     neighbor = vtree.query(point, k = 1, p = 2)
+        #     x_eval = (v[neighbor[1]][0] >= point[0] - (r_eval / 2)) and (v[neighbor[1]][0] < point[0] + (r_eval / 2))
+        #     y_eval = (v[neighbor[1]][1] >= point[1] - (r_eval / 2)) and (v[neighbor[1]][1] < point[1] + (r_eval / 2))
+        #     z_eval = (v[neighbor[1]][2] >= point[2] - (r_eval / 2)) and (v[neighbor[1]][2] < point[2] + (r_eval / 2))
+        #     if x_eval and y_eval and z_eval:
+        #         count[i] += 1
+        with Pool() as p:
+            count[i] = sum(p.map(partial(query_tree, vtree, v, r_eval), points))
+
     
     # get the slope of r_seq and count in log scale, slope here is fractal dimension
     x = np.log(np.reciprocal(r_seq))
@@ -228,16 +258,10 @@ class Shape:
         return vector_dispersion
     
     def fractal_dim_cube_counting(self, min_res = 0.01):
-        self.cube_counting_fractal_dimension = fd_cube(self.vertices, min_res)[0]
-        self.cube_counting_zero_intercept = fd_cube(self.vertices, min_res)[1]
+        self.cube_counting_fractal_dimension, self.cube_counting_zero_intercept = fd_cube(self.vertices, min_res)
         return fd_cube(self.vertices, min_res)
     
 
-mesh1 = Shape("synthetic_shapes/icosphere_sub5.obj")
-# mesh1.filepath
-# mesh1.vector_dispersion()
-mesh1.face_count
-mesh1.fractal_dim_cube_counting()
 
 synth_high_convexity = Shape("synthetic_shapes/high_convexity.obj")
 synth_high_convexity.vector_dispersion()
@@ -250,3 +274,6 @@ synth_low_convexity.fractal_dim_cube_counting()
 
 synth_high_convexity.cube_counting_fractal_dimension
 synth_low_convexity.cube_counting_fractal_dimension
+
+synth_high_convexity.vector_dispersion
+synth_low_convexity.vector_dispersion
